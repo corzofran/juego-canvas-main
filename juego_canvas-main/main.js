@@ -156,47 +156,14 @@ cargarRecursos();*/
 const canvas = document.getElementById("miCanvas");
 const ctx = canvas.getContext("2d");
 
-// --- CONFIGURACIÓN DEL JUEGO ---
+// --- 1. CARGA DEL SPRITE SHEET ---
 const imagenSprite = new Image();
 imagenSprite.src = './assets/spaceship/space-ship_spritesheet.png'; 
 
+// --- SPRITE DEL ENEMIGO ---
 const imagenEnemigoSprite = new Image();
 imagenEnemigoSprite.src = './assets/spaceship/space-ship_spritesheet.png';
 
-// --- SISTEMA DE PARTÍCULAS ---
-let particulas = [];
-
-function crearParticula(x, y, color, velocidad = 3) {
-    return {
-        x: x,
-        y: y,
-        vx: (Math.random() - 0.5) * velocidad,
-        vy: (Math.random() - 0.5) * velocidad,
-        vida: 30,
-        color: color,
-        tamaño: Math.random() * 4 + 2
-    };
-}
-
-function crearExplosion(x, y, cantidad = 20) {
-    const colores = ['#ff0000', '#ff8800', '#ffff00', '#ff4400'];
-    for(let i = 0; i < cantidad; i++) {
-        particulas.push(crearParticula(x, y, colores[Math.floor(Math.random() * colores.length)], 5));
-    }
-}
-
-// --- ESTRELLAS DE FONDO ---
-let estrellas = [];
-for(let i = 0; i < 100; i++) {
-    estrellas.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        velocidad: Math.random() * 2 + 0.5,
-        tamaño: Math.random() * 2
-    });
-}
-
-// --- JUGADOR ---
 const Jugador = {
     x: canvas.width / 2 - 40,
     y: canvas.height - 100,
@@ -213,108 +180,65 @@ const Jugador = {
     timerAnimacion: 0,
     velocidadAnimacion: 4,
     
-    // Sistema de dash
-    dashDisponible: true,
-    dashCooldown: 0,
-    enDash: false,
-    dashDuracion: 0,
-    dashVelocidad: 15,
-    
-    tipoDisparo: 'normal',
+    // SISTEMA DE DISPARO
+    tipoDisparo: 'normal', // normal, triple, laser, spread, missile
     tiempoUltimoDisparo: 0,
-    cooldownDisparo: 10,
-    duracionPowerUp: 0,
-    
-    // Escudo
-    tieneEscudo: false,
-    duracionEscudo: 0
+    cooldownDisparo: 10, // Frames entre disparos
+    duracionPowerUp: 0
 }
 
-// --- ENEMIGOS MÚLTIPLES ---
-let enemigos = [];
-
-function crearEnemigo(x, y, tipo = 'normal') {
-    const tipos = {
-        normal: { vida: 10, velocidad: 4, puntos: 100, color: '#ff0000' },
-        rapido: { vida: 5, velocidad: 8, puntos: 150, color: '#00ff00' },
-        tanque: { vida: 25, velocidad: 2, puntos: 300, color: '#0000ff' },
-        jefe: { vida: 50, velocidad: 3, puntos: 500, color: '#ff00ff' }
-    };
+// --- ENEMIGO ---
+const Enemigo = {
+    x: canvas.width / 2 - 40,
+    y: 50,
+    ancho: 80,
+    alto: 80,
     
-    const config = tipos[tipo] || tipos.normal;
+    sprite: imagenEnemigoSprite,
+    totalFrames: 8,
+    frameActual: 0,
     
-    return {
-        x: x,
-        y: y,
-        ancho: tipo === 'jefe' ? 120 : 80,
-        alto: tipo === 'jefe' ? 120 : 80,
-        
-        sprite: imagenEnemigoSprite,
-        totalFrames: 8,
-        frameActual: 0,
-        
-        anchoOriginalFrame: 0,
-        altoOriginalFrame: 0,
-        
-        timerAnimacion: 0,
-        velocidadAnimacion: 4,
-        
-        vida: config.vida,
-        vidaMaxima: config.vida,
-        
-        velocidadX: config.velocidad,
-        direccion: Math.random() > 0.5 ? 1 : -1,
-        
-        tiempoUltimoDisparo: 0,
-        intervaloDisparo: tipo === 'jefe' ? 30 : 60,
-        
-        tipo: tipo,
-        puntos: config.puntos,
-        color: config.color
-    };
+    anchoOriginalFrame: 0,
+    altoOriginalFrame: 0,
+    
+    timerAnimacion: 0,
+    velocidadAnimacion: 4,
+    
+    vida: 10,
+    vidaMaxima: 10,
+    
+    velocidadX: 4,
+    direccion: 1,
+    
+    tiempoUltimoDisparo: 0,
+    intervaloDisparo: 60
 }
 
-let balasJugador = [];
+let balasJugador = []; // Ahora usamos un array para múltiples balas
 let balasEnemigas = [];
-let powerUps = [];
-let comboActual = 0;
-let tiempoCombo = 0;
+let powerUps = []; // Power-ups que caen
 
-// --- STATS DEL JUGADOR ---
+// --- SISTEMA DE JUGADOR ---
 const JugadorStats = {
-    vida: 5,
-    vidaMaxima: 5,
+    vida: 3,
+    vidaMaxima: 3,
     invulnerable: false,
-    tiempoInvulnerable: 0,
-    escudo: 0
+    tiempoInvulnerable: 0
 }
 
-// --- SISTEMA DE JUEGO ---
+// --- SISTEMA DE DIFICULTAD PROGRESIVA ---
 let puntuacion = 0;
 let nivel = 1;
 let framesTotales = 0;
-let oleadaActual = 0;
-let enemigosEliminados = 0;
-let tiempoEntreOleadas = 0;
-let juegoIniciado = false;
-let mejorPuntuacion = localStorage.getItem('bestScore') || 0;
 
-// --- SISTEMA DE LOGROS ---
-let logros = {
-    primeraMuerte: false,
-    combo10: false,
-    nivel5: false,
-    sinDaño: true
-};
-
-// --- BALAS ---
+// --- TIPOS DE BALAS ---
 function crearBala(x, y, tipo = 'normal', angulo = 0) {
     const balas = {
         normal: { color: "#ffff00", ancho: 6, alto: 18, velocidad: 12, daño: 1 },
         triple: { color: "#00ffff", ancho: 5, alto: 15, velocidad: 12, daño: 1 },
         laser: { color: "#ff00ff", ancho: 8, alto: 30, velocidad: 15, daño: 2 },
         spread: { color: "#ff8800", ancho: 8, alto: 12, velocidad: 10, daño: 1 },
-        plasma: { color: "#00ff00", ancho: 12, alto: 12, velocidad: 10, daño: 3 },
+        missile: { color: "#ff0000", ancho: 10, alto: 20, velocidad: 8, daño: 3 },
         enemigo: { color: "#ff0000", ancho: 6, alto: 18, velocidad: 7, daño: 1 }
     };
     
@@ -331,14 +255,13 @@ function crearBala(x, y, tipo = 'normal', angulo = 0) {
         active: true,
         tipo: tipo,
         angulo: angulo,
-        trail: [],
-        rotacion: 0
+        trail: [] // Estela para efecto visual
     };
 }
 
-// --- POWER-UPS MEJORADOS ---
+// --- POWER-UPS ---
 function crearPowerUp(x, y) {
-    const tipos = ['triple', 'laser', 'spread', 'plasma', 'escudo', 'vida'];
+    const tipos = ['triple', 'laser', 'spread', 'missile'];
     const tipoAleatorio = tipos[Math.floor(Math.random() * tipos.length)];
     
     return {
@@ -349,36 +272,24 @@ function crearPowerUp(x, y) {
         tipo: tipoAleatorio,
         velocidad: 2,
         activo: true,
-        parpadeo: 0,
-        rotacion: 0
+        parpadeo: 0
     };
 }
 
 // --- CONTROLES ---
-const teclas = { Arriba: false, Abajo: false, Izquierda: false, Derecha: false, Espacio: false, Shift: false }
+const teclas = { Arriba: false, Abajo: false, Izquierda: false, Derecha: false, Espacio: false }
 
 window.addEventListener('keydown', (e) => { 
     if(e.code === "Space") { 
         e.preventDefault(); 
         teclas.Espacio = true;
-        
-        // Iniciar juego
-        if(!juegoIniciado) {
-            juegoIniciado = true;
-            iniciarOleada();
-        }
-    } else if(e.code === "ShiftLeft" || e.code === "ShiftRight") {
-        e.preventDefault();
-        teclas.Shift = true;
-    } else moveOrStop(e.key, true);
+    } else moveOrStop(e.key, true) 
 });
 
 window.addEventListener('keyup', (e) => { 
     if(e.code === "Space") {
         teclas.Espacio = false;
-    } else if(e.code === "ShiftLeft" || e.code === "ShiftRight") {
-        teclas.Shift = false;
-    } else moveOrStop(e.key, false);
+    } else moveOrStop(e.key, false) 
 });
 
 function moveOrStop(key, move){ 
@@ -390,7 +301,7 @@ function moveOrStop(key, move){
     }
 }
 
-// --- SISTEMA DE DISPARO ---
+// --- SISTEMA DE DISPARO MEJORADO ---
 function disparar() {
     const centroX = Jugador.x + (Jugador.ancho / 2);
     const centroY = Jugador.y;
@@ -401,51 +312,43 @@ function disparar() {
             break;
             
         case 'triple':
+            // Disparo central
             balasJugador.push(crearBala(centroX - 3, centroY, 'triple', 0));
+            // Disparo izquierdo (ángulo -15 grados)
             balasJugador.push(crearBala(centroX - 20, centroY, 'triple', -0.3));
+            // Disparo derecho (ángulo +15 grados)
             balasJugador.push(crearBala(centroX + 14, centroY, 'triple', 0.3));
             break;
             
         case 'laser':
+            // Láser potente del centro
             balasJugador.push(crearBala(centroX - 4, centroY - 10, 'laser'));
             break;
             
         case 'spread':
+            // Disparo en abanico (5 direcciones)
             for(let i = -2; i <= 2; i++) {
-                let angulo = i * 0.4;
+                let angulo = i * 0.4; // Ángulos: -0.8, -0.4, 0, 0.4, 0.8
                 balasJugador.push(crearBala(centroX - 4, centroY, 'spread', angulo));
             }
             break;
             
-        case 'plasma':
-            balasJugador.push(crearBala(centroX - 6, centroY - 5, 'plasma'));
-            for(let i = 0; i < 8; i++) {
-                particulas.push(crearParticula(centroX, centroY, '#00ff00', 2));
-            }
+        case 'missile':
+            // Misiles teledirigidos (2)
+            balasJugador.push(crearBala(centroX - 25, centroY, 'missile'));
+            balasJugador.push(crearBala(centroX + 15, centroY, 'missile'));
             break;
     }
 }
 
-// --- SISTEMA DE OLEADAS ---
-function iniciarOleada() {
-    oleadaActual++;
-    let cantidadEnemigos = Math.min(2 + oleadaActual, 8);
-    
-    // Oleada especial cada 5 niveles: JEFE
-    if(oleadaActual % 5 === 0) {
-        enemigos.push(crearEnemigo(canvas.width / 2 - 60, 50, 'jefe'));
-        console.log("¡JEFE APARECIÓ!");
+// --- DISPARO DEL ENEMIGO ---
+function enemigoDispara() {
+    if(nivel >= 3) {
+        balasEnemigas.push(crearBala(Enemigo.x + (Enemigo.ancho/2) - 3, Enemigo.y + Enemigo.alto, 'enemigo'));
+        balasEnemigas.push(crearBala(Enemigo.x + 10, Enemigo.y + Enemigo.alto, 'enemigo'));
+        balasEnemigas.push(crearBala(Enemigo.x + Enemigo.ancho - 16, Enemigo.y + Enemigo.alto, 'enemigo'));
     } else {
-        for(let i = 0; i < cantidadEnemigos; i++) {
-            let tipos = ['normal', 'normal', 'rapido', 'tanque'];
-            let tipoAleatorio = tipos[Math.floor(Math.random() * tipos.length)];
-            let x = Math.random() * (canvas.width - 100) + 50;
-            let y = Math.random() * 100 + 30;
-            let nuevoEnemigo = crearEnemigo(x, y, tipoAleatorio);
-            nuevoEnemigo.anchoOriginalFrame = imagenEnemigoSprite.width / 8;
-            nuevoEnemigo.altoOriginalFrame = imagenEnemigoSprite.height;
-            enemigos.push(nuevoEnemigo);
-        }
+        balasEnemigas.push(crearBala(Enemigo.x + (Enemigo.ancho/2) - 3, Enemigo.y + Enemigo.alto, 'enemigo'));
     }
 }
 
@@ -457,39 +360,8 @@ function hayColision(obj1, obj2) {
            obj1.y + obj1.alto > obj2.y;
 }
 
-// --- ACTUALIZAR ---
 function actualizar() {
-    if(!juegoIniciado) return;
-    
     framesTotales++;
-    
-    // Estrellas de fondo
-    for(let estrella of estrellas) {
-        estrella.y += estrella.velocidad;
-        if(estrella.y > canvas.height) {
-            estrella.y = 0;
-            estrella.x = Math.random() * canvas.width;
-        }
-    }
-    
-    // Partículas
-    for(let i = particulas.length - 1; i >= 0; i--) {
-        let p = particulas[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vida--;
-        if(p.vida <= 0) {
-            particulas.splice(i, 1);
-        }
-    }
-    
-    // Sistema de combo
-    if(tiempoCombo > 0) {
-        tiempoCombo--;
-        if(tiempoCombo <= 0) {
-            comboActual = 0;
-        }
-    }
     
     // Sistema de invulnerabilidad
     if(JugadorStats.invulnerable) {
@@ -504,69 +376,15 @@ function actualizar() {
         Jugador.duracionPowerUp--;
         if(Jugador.duracionPowerUp <= 0) {
             Jugador.tipoDisparo = 'normal';
+            console.log("Power-up terminado");
         }
     }
     
-    // Duración del escudo
-    if(Jugador.tieneEscudo) {
-        Jugador.duracionEscudo--;
-        if(Jugador.duracionEscudo <= 0) {
-            Jugador.tieneEscudo = false;
-        }
-    }
-    
-    // Sistema de dash
-    if(Jugador.dashCooldown > 0) {
-        Jugador.dashCooldown--;
-        if(Jugador.dashCooldown <= 0) {
-            Jugador.dashDisponible = true;
-        }
-    }
-    
-    if(Jugador.enDash) {
-        Jugador.dashDuracion--;
-        if(Jugador.dashDuracion <= 0) {
-            Jugador.enDash = false;
-        }
-    }
-    
-    // Movimiento del jugador con dash
-    let velocidadMov = Jugador.enDash ? Jugador.dashVelocidad : 6;
-    
-    if(teclas.Arriba && Jugador.y > 0) {
-        Jugador.y -= velocidadMov;
-        for(let i = 0; i < 2; i++) {
-            particulas.push(crearParticula(Jugador.x + Jugador.ancho/2, Jugador.y + Jugador.alto, '#00aaff', 1));
-        }
-    }
-    if(teclas.Abajo && Jugador.y < (canvas.height - Jugador.alto)) {
-        Jugador.y += velocidadMov;
-        for(let i = 0; i < 2; i++) {
-            particulas.push(crearParticula(Jugador.x + Jugador.ancho/2, Jugador.y, '#00aaff', 1));
-        }
-    }
-    if(teclas.Izquierda && Jugador.x > 0) {
-        Jugador.x -= velocidadMov;
-        for(let i = 0; i < 2; i++) {
-            particulas.push(crearParticula(Jugador.x + Jugador.ancho, Jugador.y + Jugador.alto/2, '#00aaff', 1));
-        }
-    }
-    if(teclas.Derecha && Jugador.x < canvas.width - Jugador.ancho) {
-        Jugador.x += velocidadMov;
-        for(let i = 0; i < 2; i++) {
-            particulas.push(crearParticula(Jugador.x, Jugador.y + Jugador.alto/2, '#00aaff', 1));
-        }
-    }
-    
-    // Activar dash
-    if(teclas.Shift && Jugador.dashDisponible && !Jugador.enDash) {
-        Jugador.enDash = true;
-        Jugador.dashDuracion = 10;
-        Jugador.dashDisponible = false;
-        Jugador.dashCooldown = 120; // 2 segundos
-        JugadorStats.invulnerable = true;
-        JugadorStats.tiempoInvulnerable = 10;
-    }
+    // Movimiento Jugador
+    if(teclas.Arriba && Jugador.y > 0) Jugador.y -= 5
+    if(teclas.Abajo && Jugador.y < (canvas.height - Jugador.alto)) Jugador.y += 5
+    if(teclas.Izquierda && Jugador.x > 0) Jugador.x -=5
+    if(teclas.Derecha && Jugador.x < canvas.width - Jugador.ancho) Jugador.x +=5
     
     // Sistema de disparo continuo
     Jugador.tiempoUltimoDisparo++;
@@ -575,53 +393,32 @@ function actualizar() {
         Jugador.tiempoUltimoDisparo = 0;
     }
     
-    // --- ENEMIGOS ---
-    if(enemigos.length === 0 && tiempoEntreOleadas === 0) {
-        tiempoEntreOleadas = 120; // 2 segundos entre oleadas
-    }
-    
-    if(tiempoEntreOleadas > 0) {
-        tiempoEntreOleadas--;
-        if(tiempoEntreOleadas === 0) {
-            iniciarOleada();
-        }
-    }
-    
-    for(let enemigo of enemigos) {
-        // Movimiento
-        enemigo.x += enemigo.velocidadX * enemigo.direccion;
+    // --- MOVIMIENTO DEL ENEMIGO ---
+    if(Enemigo.vida > 0) {
+        let velocidadActual = Enemigo.velocidadX + (nivel * 0.5);
+        Enemigo.x += velocidadActual * Enemigo.direccion;
         
-        if(enemigo.x <= 0 || enemigo.x >= canvas.width - enemigo.ancho) {
-            enemigo.direccion *= -1;
+        if(Enemigo.x <= 0 || Enemigo.x >= canvas.width - Enemigo.ancho) {
+            Enemigo.direccion *= -1;
         }
         
-        // Disparo
-        enemigo.tiempoUltimoDisparo++;
-        if(enemigo.tiempoUltimoDisparo >= enemigo.intervaloDisparo) {
-            balasEnemigas.push(crearBala(enemigo.x + enemigo.ancho/2 - 3, enemigo.y + enemigo.alto, 'enemigo'));
-            enemigo.tiempoUltimoDisparo = 0;
-        }
-        
-        // Animación
-        enemigo.timerAnimacion++;
-        if (enemigo.timerAnimacion > enemigo.velocidadAnimacion) {
-            enemigo.frameActual++;
-            if (enemigo.frameActual >= enemigo.totalFrames) {
-                enemigo.frameActual = 0;
-            }
-            enemigo.timerAnimacion = 0;
+        Enemigo.tiempoUltimoDisparo++;
+        let intervaloActual = Math.max(30, Enemigo.intervaloDisparo - (nivel * 5));
+        if(Enemigo.tiempoUltimoDisparo >= intervaloActual) {
+            enemigoDispara();
+            Enemigo.tiempoUltimoDisparo = 0;
         }
     }
     
-    // --- BALAS DEL JUGADOR ---
+    // --- ACTUALIZAR BALAS DEL JUGADOR ---
     for(let i = balasJugador.length - 1; i >= 0; i--) {
         let bala = balasJugador[i];
         
+        // Guardar posición anterior para la estela
         bala.trail.push({x: bala.x, y: bala.y});
         if(bala.trail.length > 5) bala.trail.shift();
         
-        bala.rotacion += 0.2;
-        
+        // Movimiento según ángulo
         if(bala.angulo !== 0) {
             bala.x += Math.sin(bala.angulo) * bala.velocidad;
             bala.y -= Math.cos(bala.angulo) * bala.velocidad;
@@ -629,74 +426,71 @@ function actualizar() {
             bala.y -= bala.velocidad;
         }
         
+        // Misiles teledirigidos
+        if(bala.tipo === 'missile' && Enemigo.vida > 0) {
+            let centroEnemigoX = Enemigo.x + Enemigo.ancho / 2;
+            let dx = centroEnemigoX - bala.x;
+            let distancia = Math.abs(dx);
+            
+            if(distancia > 5) {
+                bala.x += dx > 0 ? 2 : -2;
+            }
+        }
+        
+        // Eliminar si sale de pantalla
         if (bala.y + bala.alto < 0 || bala.x < -50 || bala.x > canvas.width + 50) { 
             balasJugador.splice(i, 1);
             continue;
         }
         
-        // Colisión con enemigos
-        for(let j = enemigos.length - 1; j >= 0; j--) {
-            let enemigo = enemigos[j];
-            if(hayColision(bala, enemigo)) {
-                enemigo.vida -= bala.daño;
-                balasJugador.splice(i, 1);
-                puntuacion += 10 * bala.daño;
+        // Colisión con enemigo
+        if(Enemigo.vida > 0 && hayColision(bala, Enemigo)) {
+            Enemigo.vida -= bala.daño;
+            balasJugador.splice(i, 1);
+            puntuacion += 10 * bala.daño;
+            
+            if(Enemigo.vida <= 0) {
+                console.log("¡Enemigo destruido!");
+                puntuacion += 100;
+                nivel++;
                 
-                crearExplosion(bala.x, bala.y, 5);
-                
-                if(enemigo.vida <= 0) {
-                    crearExplosion(enemigo.x + enemigo.ancho/2, enemigo.y + enemigo.alto/2, 30);
-                    puntuacion += enemigo.puntos;
-                    enemigosEliminados++;
-                    
-                    // Sistema de combo
-                    comboActual++;
-                    tiempoCombo = 180; // 3 segundos
-                    
-                    if(comboActual >= 10 && !logros.combo10) {
-                        logros.combo10 = true;
-                        mostrarLogro("¡COMBO x10!");
-                    }
-                    
-                    // Drop de power-up
-                    if(Math.random() < 0.3) {
-                        powerUps.push(crearPowerUp(enemigo.x + enemigo.ancho/2, enemigo.y));
-                    }
-                    
-                    enemigos.splice(j, 1);
+                // Chance de soltar power-up (50%)
+                if(Math.random() < 0.5) {
+                    powerUps.push(crearPowerUp(Enemigo.x + Enemigo.ancho/2, Enemigo.y));
                 }
-                break;
+                
+                setTimeout(() => {
+                    Enemigo.vida = Enemigo.vidaMaxima + (nivel * 2);
+                    Enemigo.vidaMaxima = Enemigo.vida;
+                    Enemigo.x = canvas.width / 2 - 40;
+                    console.log("¡NIVEL " + nivel + "! Enemigo más fuerte");
+                }, 1000);
             }
         }
     }
     
-    // --- POWER-UPS ---
+    // --- ACTUALIZAR POWER-UPS ---
     for(let i = powerUps.length - 1; i >= 0; i--) {
         let powerUp = powerUps[i];
         powerUp.y += powerUp.velocidad;
         powerUp.parpadeo++;
-        powerUp.rotacion += 0.05;
         
+        // Eliminar si sale de pantalla
         if(powerUp.y > canvas.height) {
             powerUps.splice(i, 1);
             continue;
         }
         
+        // Colisión con jugador
         if(hayColision(powerUp, Jugador)) {
-            if(powerUp.tipo === 'vida') {
-                JugadorStats.vida = Math.min(JugadorStats.vida + 1, JugadorStats.vidaMaxima);
-            } else if(powerUp.tipo === 'escudo') {
-                Jugador.tieneEscudo = true;
-                Jugador.duracionEscudo = 300; // 5 segundos
-            } else {
-                Jugador.tipoDisparo = powerUp.tipo;
-                Jugador.duracionPowerUp = 600;
-            }
+            Jugador.tipoDisparo = powerUp.tipo;
+            Jugador.duracionPowerUp = 600; // 10 segundos
             powerUps.splice(i, 1);
+            console.log("¡Power-up obtenido: " + powerUp.tipo + "!");
         }
     }
     
-    // --- BALAS ENEMIGAS ---
+    // --- BALAS DEL ENEMIGO ---
     for(let i = balasEnemigas.length - 1; i >= 0; i--) {
         let balaEnemiga = balasEnemigas[i];
         balaEnemiga.y += balaEnemiga.velocidad;
@@ -707,24 +501,19 @@ function actualizar() {
         }
         
         if(!JugadorStats.invulnerable && hayColision(balaEnemiga, Jugador)) {
-            if(!Jugador.tieneEscudo) {
-                JugadorStats.vida--;
-                logros.sinDaño = false;
-                JugadorStats.invulnerable = true;
-                JugadorStats.tiempoInvulnerable = 60;
-                crearExplosion(Jugador.x + Jugador.ancho/2, Jugador.y + Jugador.alto/2, 15);
-                
-                if(JugadorStats.vida <= 0) {
-                    gameOver();
-                }
-            } else {
-                Jugador.tieneEscudo = false;
-            }
+            JugadorStats.vida--;
             balasEnemigas.splice(i, 1);
+            JugadorStats.invulnerable = true;
+            JugadorStats.tiempoInvulnerable = 60;
+            
+            if(JugadorStats.vida <= 0) {
+                alert("¡GAME OVER! Puntuación: " + puntuacion + " - Nivel: " + nivel);
+                location.reload();
+            }
         }
     }
 
-    // Animación Jugador
+    // Animaciones
     Jugador.timerAnimacion++;
     if (Jugador.timerAnimacion > Jugador.velocidadAnimacion) {
         Jugador.frameActual++;
@@ -734,80 +523,49 @@ function actualizar() {
         Jugador.timerAnimacion = 0;
     }
     
-    // Nivel
-    if(enemigosEliminados >= oleadaActual * 5) {
-        nivel++;
-        if(nivel === 5 && !logros.nivel5) {
-            logros.nivel5 = true;
-            mostrarLogro("¡NIVEL 5 ALCANZADO!");
+    if(Enemigo.vida > 0) {
+        Enemigo.timerAnimacion++;
+        if (Enemigo.timerAnimacion > Enemigo.velocidadAnimacion) {
+            Enemigo.frameActual++;
+            if (Enemigo.frameActual >= Enemigo.totalFrames) {
+                Enemigo.frameActual = 0;
+            }
+            Enemigo.timerAnimacion = 0;
         }
     }
 }
 
-// --- DIBUJAR ---
 function dibujar(){
-    // Fondo degradado
-    let gradiente = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradiente.addColorStop(0, '#000428');
-    gradiente.addColorStop(1, '#004e92');
-    ctx.fillStyle = gradiente;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0,0, canvas.width, canvas.height);
     
-    // Estrellas
-    ctx.fillStyle = '#ffffff';
-    for(let estrella of estrellas) {
-        ctx.globalAlpha = 0.8;
-        ctx.fillRect(estrella.x, estrella.y, estrella.tamaño, estrella.tamaño);
-    }
-    ctx.globalAlpha = 1;
-    
-    // Partículas
-    for(let p of particulas) {
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.vida / 30;
-        ctx.fillRect(p.x, p.y, p.tamaño, p.tamaño);
-    }
-    ctx.globalAlpha = 1;
-    
-    // --- ENEMIGOS ---
-    for(let enemigo of enemigos) {
-        if(enemigo.anchoOriginalFrame > 0) {
-            let recorteX = enemigo.frameActual * enemigo.anchoOriginalFrame;
-            
-            ctx.save();
-            ctx.translate(enemigo.x + enemigo.ancho/2, enemigo.y + enemigo.alto/2);
-            ctx.rotate(Math.PI);
-            
-            // Efecto de color según tipo
-            if(enemigo.tipo === 'jefe') {
-                ctx.shadowBlur = 20;
-                ctx.shadowColor = enemigo.color;
-            }
-            
-            ctx.drawImage(
-                enemigo.sprite,
-                recorteX, 0,
-                enemigo.anchoOriginalFrame,
-                enemigo.altoOriginalFrame,
-                -enemigo.ancho/2, -enemigo.alto/2,
-                enemigo.ancho, enemigo.alto
-            );
-            ctx.restore();
-            ctx.shadowBlur = 0;
-            
-            // Barra de vida
-            let barraAncho = enemigo.ancho;
-            let vidaPorcentaje = enemigo.vida / enemigo.vidaMaxima;
-            ctx.fillStyle = "#330000";
-            ctx.fillRect(enemigo.x, enemigo.y - 10, barraAncho, 5);
-            
-            let colorVida = vidaPorcentaje > 0.5 ? "#00ff00" : vidaPorcentaje > 0.25 ? "#ffff00" : "#ff0000";
-            ctx.fillStyle = colorVida;
-            ctx.fillRect(enemigo.x, enemigo.y - 10, barraAncho * vidaPorcentaje, 5);
-        }
+    // --- DIBUJAR ENEMIGO ---
+    if(Enemigo.vida > 0 && Enemigo.anchoOriginalFrame > 0) {
+        let recorteX = Enemigo.frameActual * Enemigo.anchoOriginalFrame;
+        let recorteY = 0;
+        
+        ctx.save();
+        ctx.translate(Enemigo.x + Enemigo.ancho/2, Enemigo.y + Enemigo.alto/2);
+        ctx.rotate(Math.PI);
+        ctx.drawImage(
+            Enemigo.sprite,
+            recorteX, recorteY,
+            Enemigo.anchoOriginalFrame,
+            Enemigo.altoOriginalFrame,
+            -Enemigo.ancho/2, -Enemigo.alto/2,
+            Enemigo.ancho, Enemigo.alto
+        );
+        ctx.restore();
+        
+        // Barra de vida
+        let barraAncho = Enemigo.ancho;
+        let vidaPorcentaje = Enemigo.vida / Enemigo.vidaMaxima;
+        ctx.fillStyle = "#ff0000";
+        ctx.fillRect(Enemigo.x, Enemigo.y - 10, barraAncho, 5);
+        ctx.fillStyle = "#00ff00";
+        ctx.fillRect(Enemigo.x, Enemigo.y - 10, barraAncho * vidaPorcentaje, 5);
     }
     
-    // --- JUGADOR ---
+    // --- DIBUJAR JUGADOR ---
     if (Jugador.anchoOriginalFrame > 0) {
         let dibujar = true;
         if(JugadorStats.invulnerable) {
@@ -816,22 +574,6 @@ function dibujar(){
         
         if(dibujar) {
             let recorteX = Jugador.frameActual * Jugador.anchoOriginalFrame;
-            
-            // Escudo visual
-            if(Jugador.tieneEscudo) {
-                ctx.strokeStyle = '#00ffff';
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.arc(Jugador.x + Jugador.ancho/2, Jugador.y + Jugador.alto/2, 50, 0, Math.PI * 2);
-                ctx.stroke();
-            }
-            
-            // Efecto dash
-            if(Jugador.enDash) {
-                ctx.shadowBlur = 20;
-                ctx.shadowColor = '#00aaff';
-            }
-            
             ctx.drawImage(
                 Jugador.sprite,
                 recorteX, 0,
@@ -840,213 +582,106 @@ function dibujar(){
                 Jugador.x, Jugador.y,
                 Jugador.ancho, Jugador.alto
             );
-            ctx.shadowBlur = 0;
         }
+        
+        // Barra de vida del jugador
+        let barraX = 10;
+        let barraY = canvas.height - 30;
+        ctx.fillStyle = "#ff0000";
+        ctx.fillRect(barraX, barraY, 100, 15);
+        ctx.fillStyle = "#00ff00";
+        ctx.fillRect(barraX, barraY, 100 * (JugadorStats.vida / JugadorStats.vidaMaxima), 15);
+        ctx.strokeStyle = "#ffffff";
+        ctx.strokeRect(barraX, barraY, 100, 15);
     }
     
-    // --- BALAS ---
+    // --- DIBUJAR BALAS DEL JUGADOR CON EFECTOS ---
     for(let bala of balasJugador) {
+        // Estela
         for(let i = 0; i < bala.trail.length; i++) {
             let alpha = (i / bala.trail.length) * 0.5;
             ctx.fillStyle = bala.color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
             ctx.fillRect(bala.trail[i].x, bala.trail[i].y, bala.ancho, bala.alto);
         }
         
+        // Bala principal
         ctx.fillStyle = bala.color;
-        if(bala.tipo === 'laser' || bala.tipo === 'plasma') {
+        
+        if(bala.tipo === 'laser') {
+            // Efecto de brillo para láser
             ctx.shadowBlur = 15;
             ctx.shadowColor = bala.color;
         }
         
-        ctx.save();
-        ctx.translate(bala.x + bala.ancho/2, bala.y + bala.alto/2);
-        ctx.rotate(bala.rotacion);
-        ctx.fillRect(-bala.ancho/2, -bala.alto/2, bala.ancho, bala.alto);
-        ctx.restore();
+        ctx.fillRect(bala.x, bala.y, bala.ancho, bala.alto);
         ctx.shadowBlur = 0;
     }
     
-    // Balas enemigas
-    for(let bala of balasEnemigas) {
-        ctx.fillStyle = bala.color;
-        ctx.fillRect(bala.x, bala.y, bala.ancho, bala.alto);
+    // --- DIBUJAR BALAS ENEMIGAS ---
+    ctx.fillStyle = "#ff0000";
+    for(let balaEnemiga of balasEnemigas) {
+        ctx.fillRect(balaEnemiga.x, balaEnemiga.y, balaEnemiga.ancho, balaEnemiga.alto);
     }
     
-    // --- POWER-UPS ---
+    // --- DIBUJAR POWER-UPS ---
     for(let powerUp of powerUps) {
         if(Math.floor(powerUp.parpadeo / 10) % 2 === 0) {
+            // Color según tipo
             const colores = {
                 triple: '#00ffff',
                 laser: '#ff00ff',
                 spread: '#ff8800',
-                plasma: '#00ff00',
-                escudo: '#0088ff',
-                vida: '#ff0088'
+                missile: '#ff0000'
             };
             
-            ctx.save();
-            ctx.translate(powerUp.x + 15, powerUp.y + 15);
-            ctx.rotate(powerUp.rotacion);
-            
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = colores[powerUp.tipo];
             ctx.fillStyle = colores[powerUp.tipo];
-            ctx.fillRect(-15, -15, 30, 30);
+            ctx.fillRect(powerUp.x, powerUp.y, powerUp.ancho, powerUp.alto);
             
+            // Borde
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 2;
-            ctx.strokeRect(-15, -15, 30, 30);
+            ctx.strokeRect(powerUp.x, powerUp.y, powerUp.ancho, powerUp.alto);
             
-            ctx.shadowBlur = 0;
+            // Letra indicadora
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 16px Arial';
+            ctx.font = 'bold 20px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(powerUp.tipo[0].toUpperCase(), 0, 5);
-            ctx.restore();
+            ctx.fillText(powerUp.tipo[0].toUpperCase(), powerUp.x + 15, powerUp.y + 20);
         }
     }
     
-    // --- HUD ---
-    // Barras de vida
-    ctx.fillStyle = "rgba(0,0,0,0.5)";
-    ctx.fillRect(5, canvas.height - 35, 200, 30);
-    
-    ctx.fillStyle = "#ff0000";
-    ctx.fillRect(10, canvas.height - 30, 190, 20);
-    ctx.fillStyle = "#00ff00";
-    ctx.fillRect(10, canvas.height - 30, 190 * (JugadorStats.vida / JugadorStats.vidaMaxima), 20);
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(10, canvas.height - 30, 190, 20);
-    
-    // Texto HUD
+    // --- INFORMACIÓN EN PANTALLA ---
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 18px Arial";
+    ctx.font = "20px Arial";
     ctx.textAlign = "left";
-    ctx.fillText("💙 Vida: " + JugadorStats.vida, 15, canvas.height - 40);
-    ctx.fillText("⭐ Puntos: " + puntuacion, 10, 25);
-    ctx.fillText("🎯 Nivel: " + nivel, 10, 50);
-    ctx.fillText("🔥 Oleada: " + oleadaActual, 10, 75);
+    ctx.fillText("Vida Enemigo: " + Enemigo.vida, 10, 30);
+    ctx.fillText("Nivel: " + nivel, 10, 55);
+    ctx.fillText("Puntuación: " + puntuacion, 10, 80);
+    ctx.fillText("Vida: " + JugadorStats.vida, canvas.width - 180, 30);
     
-    // Combo
-    if(comboActual > 1) {
-        ctx.font = "bold 24px Arial";
-        ctx.fillStyle = comboActual >= 10 ? "#ff00ff" : "#ffff00";
-        ctx.textAlign = "center";
-        ctx.fillText("COMBO x" + comboActual + "!", canvas.width / 2, 50);
-    }
-    
-    // Dash cooldown
-    if(!Jugador.dashDisponible) {
-        ctx.fillStyle = "rgba(0,0,0,0.5)";
-        ctx.fillRect(canvas.width - 110, canvas.height - 35, 100, 25);
-        ctx.fillStyle = "#ff0000";
-        ctx.fillRect(canvas.width - 105, canvas.height - 30, 90, 15);
-        ctx.fillStyle = "#00ff00";
-        let dashProgress = 1 - (Jugador.dashCooldown / 120);
-        ctx.fillRect(canvas.width - 105, canvas.height - 30, 90 * dashProgress, 15);
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "12px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText("DASH", canvas.width - 60, canvas.height - 40);
-    } else {
-        ctx.fillStyle = "#00ff00";
-        ctx.font = "bold 14px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText("✓ DASH LISTO", canvas.width - 60, canvas.height - 20);
-    }
-    
-    // Arma actual
+    // Mostrar tipo de disparo activo
     if(Jugador.tipoDisparo !== 'normal') {
-        ctx.fillStyle = "rgba(0,0,0,0.7)";
-        ctx.fillRect(canvas.width - 200, 10, 190, 70);
-        
         ctx.fillStyle = "#ffff00";
-        ctx.font = "bold 16px Arial";
-        ctx.textAlign = "left";
-        ctx.fillText("🔫 " + Jugador.tipoDisparo.toUpperCase(), canvas.width - 190, 30);
-        
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "14px Arial";
-        ctx.fillText("Tiempo: " + Math.ceil(Jugador.duracionPowerUp / 60) + "s", canvas.width - 190, 50);
-        
-        // Barra de tiempo
-        let tiempoProgress = Jugador.duracionPowerUp / 600;
-        ctx.fillStyle = "#444";
-        ctx.fillRect(canvas.width - 190, 60, 170, 10);
-        ctx.fillStyle = "#00ff00";
-        ctx.fillRect(canvas.width - 190, 60, 170 * tiempoProgress, 10);
-    }
-    
-    // Escudo activo
-    if(Jugador.tieneEscudo) {
-        ctx.fillStyle = "#00ffff";
         ctx.font = "bold 18px Arial";
-        ctx.textAlign = "right";
-        ctx.fillText("🛡️ ESCUDO: " + Math.ceil(Jugador.duracionEscudo / 60) + "s", canvas.width - 10, 100);
+        ctx.fillText("Arma: " + Jugador.tipoDisparo.toUpperCase(), canvas.width - 180, 55);
+        ctx.fillText("Tiempo: " + Math.ceil(Jugador.duracionPowerUp / 60) + "s", canvas.width - 180, 75);
     }
-    
-    // Mejor puntuación
-    ctx.fillStyle = "#ffff00";
-    ctx.font = "14px Arial";
-    ctx.textAlign = "right";
-    ctx.fillText("Mejor: " + mejorPuntuacion, canvas.width - 10, 25);
-    
-    // Pantalla de inicio
-    if(!juegoIniciado) {
-        ctx.fillStyle = "rgba(0,0,0,0.8)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 48px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText("SPACE BLASTER", canvas.width / 2, canvas.height / 2 - 100);
-        
-        ctx.font = "24px Arial";
-        ctx.fillStyle = "#00ffff";
-        ctx.fillText("Presiona ESPACIO para empezar", canvas.width / 2, canvas.height / 2);
-        
-        ctx.font = "18px Arial";
-        ctx.fillStyle = "#ffff00";
-        ctx.fillText("Controles:", canvas.width / 2, canvas.height / 2 + 50);
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText("WASD / Flechas - Mover", canvas.width / 2, canvas.height / 2 + 80);
-        ctx.fillText("ESPACIO - Disparar", canvas.width / 2, canvas.height / 2 + 110);
-        ctx.fillText("SHIFT - Dash (esquiva rápida)", canvas.width / 2, canvas.height / 2 + 140);
-    }
-}
-
-function gameOver() {
-    if(puntuacion > mejorPuntuacion) {
-        mejorPuntuacion = puntuacion;
-        localStorage.setItem('bestScore', mejorPuntuacion);
-    }
-    
-    let mensaje = "¡GAME OVER!\n\n";
-    mensaje += "Puntuación: " + puntuacion + "\n";
-    mensaje += "Mejor: " + mejorPuntuacion + "\n";
-    mensaje += "Nivel alcanzado: " + nivel + "\n";
-    mensaje += "Oleadas completadas: " + oleadaActual;
-    
-    alert(mensaje);
-    location.reload();
-}
-
-function mostrarLogro(texto) {
-    console.log("🏆 LOGRO DESBLOQUEADO: " + texto);
 }
 
 function loop(){
     actualizar();
     dibujar();
-    requestAnimationFrame(loop);
+    requestAnimationFrame(loop)
 }
 
 // --- INICIALIZACIÓN ---
+console.log("Cargando Sprite Sheet...");
+
 let spritesJugadorCargado = false;
 let spritesEnemigoCargado = false;
 
 imagenSprite.onload = function() {
+    console.log("¡Sprite del Jugador cargado!");
     Jugador.anchoOriginalFrame = this.width / Jugador.totalFrames;
     Jugador.altoOriginalFrame = this.height; 
     spritesJugadorCargado = true;
@@ -1057,6 +692,9 @@ imagenSprite.onload = function() {
 };
 
 imagenEnemigoSprite.onload = function() {
+    console.log("¡Sprite del Enemigo cargado!");
+    Enemigo.anchoOriginalFrame = this.width / Enemigo.totalFrames;
+    Enemigo.altoOriginalFrame = this.height;
     spritesEnemigoCargado = true;
     
     if(spritesJugadorCargado && spritesEnemigoCargado) {
